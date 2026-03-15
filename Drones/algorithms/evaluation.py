@@ -41,5 +41,73 @@ def evaluation_function(state: GameState) -> float:
     - Consider edge cases: no pending deliveries, no hunters nearby.
     - A good evaluation function balances delivery progress with hunter avoidance.
     """
-    # TODO: Implement your code here
-    return 0.0
+
+    if state.is_win():
+        return 1000.0
+    if state.is_lose():
+        return -1000.0
+
+    layout = state.get_layout()
+    drone_pos = state.get_drone_position()
+    hunter_positions = state.get_hunter_positions()
+    pending = state.get_pending_deliveries()
+    score = state.get_score()
+
+    value = 0.0
+
+    # ── (e) Score base ──────────────────────────────────────────────────────
+    value += score * 2.0
+
+    # ── (d) Penalty por entregas pendientes ────────────────────────────────
+    value -= len(pending) * 50.0
+
+    # ── (a) Distancia al delivery más cercano ──────────────────────────────
+    if pending:
+        drone_to_delivery = [
+            bfs_distance(layout, drone_pos, dp) for dp in pending
+        ]
+        min_delivery_dist = min(drone_to_delivery)
+        value -= min_delivery_dist * 10.0
+    else:
+        min_delivery_dist = float("inf")
+
+    # ── (b) Distancia de los hunters al drone ──────────────────────────────
+    DANGER_RADIUS = 5
+    hunter_threat = 0.0
+
+    hunter_distances = [
+        bfs_distance(layout, h, drone_pos, hunter_restricted=True)
+        for h in hunter_positions
+    ]
+
+    for h_dist in hunter_distances:
+        if h_dist == float("inf"):
+            continue  # hunter bloqueado, no amenaza
+        if h_dist == 0:
+            return -1000.0  # colisión
+        if h_dist <= DANGER_RADIUS:
+            hunter_threat += 100.0 / h_dist  # más cerca → más peligro
+
+    value -= hunter_threat
+
+    # ── (f) Urgencia de entrega: premia ir a un delivery antes que el hunter ─
+    if pending and hunter_positions:
+        for dp, d2d in zip(pending, drone_to_delivery):
+            min_hunter_to_dp = min(
+                bfs_distance(layout, h, dp, hunter_restricted=True)
+                for h in hunter_positions
+            )
+            if d2d < min_hunter_to_dp:
+                # Drone llega antes que cualquier hunter → bonus
+                value += 30.0 / (d2d + 1)
+
+    # ── (c) Premio por estar lejos del hunter más cercano ──────────────────
+    if hunter_distances:
+        min_hunter_dist = min(
+            d for d in hunter_distances if d != float("inf")
+        ) if any(d != float("inf") for d in hunter_distances) else float("inf")
+
+        if min_hunter_dist != float("inf"):
+            value += min(min_hunter_dist * 5.0, 100.0)
+
+    return max(-1000.0, min(1000.0, value))
