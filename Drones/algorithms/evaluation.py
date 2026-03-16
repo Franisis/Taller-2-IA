@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from algorithms.utils import bfs_distance
 
 
 if TYPE_CHECKING:
